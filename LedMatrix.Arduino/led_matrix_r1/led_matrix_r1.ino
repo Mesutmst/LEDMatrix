@@ -6,7 +6,7 @@
 #define LMX_CLK 10
 #define LMX_CS 11
 /* LED Matrix Count */
-#define LMX_COUNT 2
+#define LMX_COUNT 3
 
 LedControl ctrl = LedControl(LMX_DIN, LMX_CLK, LMX_CS, LMX_COUNT);
 
@@ -83,4 +83,5 @@ void loop() {
   mxSerialReadFrame(currentFrame);
   mxPrintFrame(currentFrame);
 }
-
+
+

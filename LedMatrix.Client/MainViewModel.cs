@@ -7,10 +7,11 @@ namespace LedMatrix.Client
 {
    public class MainViewModel : NotifyChangeBase
    {
+      private const int MatrixCount = 3;
       private const string DefaultPortName = "COM3";
       private const int DefaultBaudRate = 115200;
       private Random _Random;
-      private IEnumerator<FramePacket>[] _Programs = new IEnumerator<FramePacket>[2];
+      private IEnumerator<FramePacket>[] _Programs = new IEnumerator<FramePacket>[MatrixCount];
 
       public MainViewModel()
       {
@@ -70,7 +71,7 @@ namespace LedMatrix.Client
          set { SetPropertyValue(ref _InputText, value); }
       }
 
-      private bool _CapturePingText = true;
+      private bool _CapturePingText;
       public bool CapturePingText
       {
          get { return _CapturePingText; }
@@ -121,7 +122,7 @@ namespace LedMatrix.Client
 
       public int[] MatrixList
       {
-         get { return new[] { 0, 1 }; }
+         get { return Enumerable.Range(0, MatrixCount).ToArray(); }
       }
 
       public void NextTimerTick()
