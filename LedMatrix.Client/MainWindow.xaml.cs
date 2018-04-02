@@ -16,15 +16,12 @@ namespace LedMatrix.Client
       {
          InitializeComponent();
          _ViewModel = new MainViewModel();
-         _Timer = new DispatcherTimer();
-         _Timer.Interval = TimeSpan.FromMilliseconds(60);
-         _Timer.Tick += Timer_Tick;
          DataContext = _ViewModel;
-      }
 
-      private void Timer_Tick(object sender, EventArgs e)
-      {
-         _ViewModel.NextTimerTick();
+         _Timer = new DispatcherTimer();
+         _Timer.Interval = TimeSpan.FromMilliseconds(2);
+         _Timer.Tick += (s, e) => { _ViewModel.NextTimerTick(); };
+         Closing += (s, e) => { _ViewModel.Cleanup(); };
       }
 
       private void OpenPort_Click(object sender, RoutedEventArgs e)
@@ -60,6 +57,12 @@ namespace LedMatrix.Client
       private void CountButton_Click(object sender, RoutedEventArgs e)
       {
          _ViewModel.InitialiseCountProgram();
+         _Timer.IsEnabled = true;
+      }
+
+      private void AudioButton_Click(object sender, RoutedEventArgs e)
+      {
+         _ViewModel.InitialiseAudioProgram();
          _Timer.IsEnabled = true;
       }
 

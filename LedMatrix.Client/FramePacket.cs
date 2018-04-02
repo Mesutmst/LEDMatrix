@@ -1,4 +1,5 @@
-﻿using System.Linq;
+﻿using System;
+using System.Linq;
 
 namespace LedMatrix.Client
 {
@@ -7,9 +8,9 @@ namespace LedMatrix.Client
       private byte _Header;
       private byte _MatrixId;
       private byte[] _FrameData;
-      
+
       public FramePacket(byte header, byte matrixId, byte frameData)
-         :this(header,matrixId, Enumerable.Repeat(frameData,8).ToArray())
+         : this(header, matrixId, Enumerable.Repeat(frameData, 8).ToArray())
       {
       }
 
@@ -19,6 +20,10 @@ namespace LedMatrix.Client
          _MatrixId = matrixId;
          _FrameData = frameData;
       }
+
+      public byte Header { get { return _Header; } }
+      public byte MatrixId { get { return _MatrixId; } }
+      public byte[] FrameData { get { return (byte[])_FrameData.Clone(); } }
 
       public override string ToString()
       {

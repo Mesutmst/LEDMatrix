@@ -1,4 +1,9 @@
-﻿using System;
+﻿using CSCore;
+using CSCore.DSP;
+using CSCore.SoundIn;
+using CSCore.Streams;
+using LedMatrix.Client.Audio;
+using System;
 using System.Collections.Generic;
 using System.IO.Ports;
 using System.Linq;
@@ -13,6 +18,12 @@ namespace LedMatrix.Client
       private Random _Random;
       private IEnumerator<FramePacket>[] _Programs = new IEnumerator<FramePacket>[MatrixCount];
 
+      // LED Audio Visualizer 
+      private LineSpectrum _spectrum;
+      private WasapiLoopbackCapture _soundIn;
+      private IWaveSource _source;
+      private int _barCount = 24;
+
       public MainViewModel()
       {
          _Random = new Random();
@@ -26,24 +37,13 @@ namespace LedMatrix.Client
       private void InitialiseSerialPort()
       {
          _Port = new SerialPort(SelectedSerialPort, SelectedBaudRate);
-         _Port.DataReceived += _Port_DataReceived;
          _Port.ErrorReceived += _Port_ErrorReceived;
          UpdatePortStatus();
       }
 
       private void _Port_ErrorReceived(object sender, SerialErrorReceivedEventArgs e)
       {
-         PongText += "ERROR\r\n";
-      }
-
-      private void _Port_DataReceived(object sender, SerialDataReceivedEventArgs e)
-      {
-         string data = _Port.ReadExisting();
-         if (!string.IsNullOrEmpty(data))
-         {
-            if (CapturePongText)
-               PongText += data;
-         }
+         PongText += $"{DateTime.Now.ToLongTimeString()} ERROR\r\n";
       }
 
       public string[] SerialPorts { get; set; }
@@ -127,14 +127,36 @@ namespace LedMatrix.Client
 
       public void NextTimerTick()
       {
-         foreach(var program in _Programs)
+         foreach (var program in _Programs)
          {
             if (program != null && program.MoveNext())
             {
-               if (CapturePingText)
-                  PingText += $"{program.Current}\r\n";
+               var packet = program.Current;
+               var packetText = program.Current.ToString();
 
-               SendPortMessage(program.Current.ToString());
+               if (CapturePingText)
+               {
+                  string packetData = string.Empty;
+                  foreach (var b in packet.FrameData)
+                  {
+                     packetData += (b & 0x80) > 0 ? 'o' : ' ';
+                     packetData += (b & 0x40) > 0 ? 'o' : ' ';
+                     packetData += (b & 0x20) > 0 ? 'o' : ' ';
+                     packetData += (b & 0x10) > 0 ? 'o' : ' ';
+                     packetData += (b & 0x08) > 0 ? 'o' : ' ';
+                     packetData += (b & 0x04) > 0 ? 'o' : ' ';
+                     packetData += (b & 0x02) > 0 ? 'o' : ' ';
+                     packetData += (b & 0x01) > 0 ? 'o' : ' ';
+                     packetData += "\r\n";
+                  }
+
+                  PingText = $"{packet.ToString()}\r\n{packetData}\r\n";
+                  return;
+               }
+               else
+               {
+                  SendPortMessage(packetText);
+               }
             }
          }
       }
@@ -154,13 +176,53 @@ namespace LedMatrix.Client
          _Programs[MatrixId] = CountSequence(MatrixId).GetEnumerator();
       }
 
+      public void InitialiseAudioProgram()
+      {
+         _soundIn = new WasapiLoopbackCapture();
+         _soundIn.Initialize();
+
+         var soundInSource = new SoundInSource(_soundIn);
+         ISampleSource source = soundInSource.ToSampleSource();
+
+         var spectrumProvider = new SpectrumProvider(2, 48000, FftSize.Fft4096);
+
+         _spectrum = new LineSpectrum(spectrumProvider, _barCount);
+         var notificationSource = new SingleBlockNotificationStream(source);
+         notificationSource.SingleBlockRead += (s, a) => spectrumProvider.Add(a.Left, a.Right);
+
+         _source = notificationSource.ToWaveSource(16);
+
+         // Read from the source otherwise SingleBlockRead is never called
+         byte[] buffer = new byte[_source.WaveFormat.BytesPerSecond / 2];
+         soundInSource.DataAvailable += (src, evt) =>
+         {
+            int read;
+            while ((read = _source.Read(buffer, 0, buffer.Length)) > 0) ;
+         };
+
+         _soundIn.Start();
+
+         for (int i = 0; i < MatrixCount; i++)
+         {
+            _Programs[i] = i == 0 ? AudioSequence().GetEnumerator() : null;
+         }
+      }
+
       public void ClearPrograms()
       {
-         for(int i=0; i < _Programs.Length; i++)
+         for (int i = 0; i < _Programs.Length; i++)
          {
             _Programs[i] = null;
             SendPortMessage(new FramePacket(0, (byte)i, 0).ToString());
          }
+      }
+
+      public void Cleanup()
+      {
+         if (_soundIn != null)
+            _soundIn.Stop();
+
+         ClearPrograms();
       }
 
       private IEnumerable<FramePacket> RandomSequence(int matrixId)
@@ -192,7 +254,7 @@ namespace LedMatrix.Client
 
          while (true)
          {
-            for(int i = 0; i < rows; i++)
+            for (int i = 0; i < rows; i++)
             {
                angleData[i] = (angleData[i] + speed) % 180;
                sinData[i] = 0.05 + Math.Sin(Math.PI * angleData[i] / 180.0);
@@ -207,12 +269,43 @@ namespace LedMatrix.Client
                      (d >= sep * 5 ? 0x08 : 0x00) |
                      (d >= sep * 4 ? 0x10 : 0x00) |
                      (d >= sep * 3 ? 0x20 : 0x00) |
-                     (d >= sep * 2 ? 0x40 : 0x00) | 
+                     (d >= sep * 2 ? 0x40 : 0x00) |
                      0x80;
                return (byte)(n & 0xFF);
             };
 
             yield return new FramePacket(0, (byte)matrixId, sinData.Select(d => ConvertToBits(d)).ToArray());
+         }
+      }
+
+      private IEnumerable<FramePacket> AudioSequence()
+      {
+         while (true)
+         {
+            byte[] chart = _spectrum.CreateSpectrumGraph();
+
+            foreach (int i in Enumerable.Range(0, 3))
+            {
+               byte[] frameData = new byte[8];
+
+               if (chart != null)
+               {
+                  switch (_barCount)
+                  {
+                     case 24:
+                        Array.Copy(chart, i * 8, frameData, 0, 8);
+                        break;
+                     case 12:
+                        frameData[0] = chart[i * 4];
+                        frameData[2] = chart[i * 4 + 1];
+                        frameData[4] = chart[i * 4 + 2];
+                        frameData[6] = chart[i * 4 + 3];
+                        break;
+                  }
+               }
+
+               yield return new FramePacket(0, (byte)i, frameData);
+            }
          }
       }
 

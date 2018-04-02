@@ -33,6 +33,7 @@
          <Button Content="Random" Height="30" Margin="0,0,0,3" Click="RandomButton_Click" IsEnabled="{Binding IsPortOpen}"/>
          <Button Content="Sin Wave" Height="30" Margin="0,0,0,3" Click="SinWaveButton_Click" IsEnabled="{Binding IsPortOpen}"/>
          <Button Content="Count" Height="30" Margin="0,0,0,3" Click="CountButton_Click" IsEnabled="{Binding IsPortOpen}"/>
+         <Button Content="Audio" Height="30" Margin="0,0,0,3" Click="AudioButton_Click" IsEnabled="{Binding IsPortOpen}"/>
          <Button Content="Stop!" Height="30" Margin="0,0,0,3" Click="StopButton_Click" IsEnabled="{Binding IsPortOpen}"/>
          <CheckBox IsChecked="{Binding CapturePingText}" Content="Sent"/>
          <CheckBox IsChecked="{Binding CapturePongText}" Content="Recv"/>
